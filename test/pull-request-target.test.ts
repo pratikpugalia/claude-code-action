@@ -44,6 +44,7 @@ describe("pull_request_target event support", () => {
       baseRefName: "main",
       headRefName: "feature-branch",
       headRefOid: "abc123",
+      isCrossRepository: false,
       commits: {
         totalCount: 2,
         nodes: [

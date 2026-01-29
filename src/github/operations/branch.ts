@@ -9,11 +9,21 @@
 import { $ } from "bun";
 import { execFileSync } from "child_process";
 import * as core from "@actions/core";
+import { randomUUID } from "crypto";
 import type { ParsedGitHubContext } from "../context";
 import type { GitHubPullRequest } from "../types";
 import type { Octokits } from "../api/client";
 import type { FetchDataResult } from "../data/fetcher";
 import { generateBranchName } from "../../utils/branch-template";
+
+/**
+ * Generates a unique branch name by appending a short UUID suffix.
+ * Used for fork PRs to avoid conflicts with existing branches in the base repo.
+ */
+function generateUniqueBranchName(baseName: string): string {
+  const shortUuid = randomUUID().split("-")[0]; // Use first segment (8 chars)
+  return `${baseName}-${shortUuid}`;
+}
 
 /**
  * Extracts the first label from GitHub data, or returns undefined if no labels exist
@@ -153,13 +163,14 @@ export async function setupBranch(
       console.log("This is an open PR, checking out PR branch...");
 
       const branchName = prData.headRefName;
+      const isForkPR = prData.isCrossRepository;
 
       // Determine optimal fetch depth based on PR commit count, with a minimum of 20
       const commitCount = prData.commits.totalCount;
       const fetchDepth = Math.max(commitCount, 20);
 
       console.log(
-        `PR #${entityNumber}: ${commitCount} commits, using fetch depth ${fetchDepth}`,
+        `PR #${entityNumber}: ${commitCount} commits, using fetch depth ${fetchDepth}${isForkPR ? " (fork PR)" : ""}`,
       );
 
       // Validate branch names before use to prevent command injection
@@ -167,10 +178,43 @@ export async function setupBranch(
 
       // Execute git commands to checkout PR branch (dynamic depth based on PR size)
       // Using execFileSync instead of shell template literals for security
-      execGit(["fetch", "origin", `--depth=${fetchDepth}`, branchName]);
-      execGit(["checkout", branchName, "--"]);
+      if (isForkPR) {
+        // For fork PRs, use GitHub's PR refs (refs/pull/NUMBER/head) which are
+        // automatically created in the base repository for all PRs.
+        // We use a unique local branch name to avoid conflicts with existing branches.
+        const localBranchName = generateUniqueBranchName(branchName);
+        validateBranchName(localBranchName);
 
-      console.log(`Successfully checked out PR branch for PR #${entityNumber}`);
+        console.log(
+          `Fork PR detected: fetching pull/${entityNumber}/head into local branch ${localBranchName}`,
+        );
+        execGit([
+          "fetch",
+          "origin",
+          `--depth=${fetchDepth}`,
+          `pull/${entityNumber}/head:${localBranchName}`,
+        ]);
+        execGit(["checkout", localBranchName, "--"]);
+
+        console.log(
+          `Successfully checked out fork PR #${entityNumber} to branch ${localBranchName}`,
+        );
+
+        // For open PRs, we need to get the base branch of the PR
+        const baseBranch = prData.baseRefName;
+        validateBranchName(baseBranch);
+
+        return {
+          baseBranch,
+          currentBranch: localBranchName,
+        };
+      } else {
+        // For same-repo PRs, fetch the branch directly by name
+        execGit(["fetch", "origin", `--depth=${fetchDepth}`, branchName]);
+        execGit(["checkout", branchName, "--"]);
+
+        console.log(`Successfully checked out PR branch for PR #${entityNumber}`);
+      }
 
       // For open PRs, we need to get the base branch of the PR
       const baseBranch = prData.baseRefName;
