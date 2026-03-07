@@ -222,10 +222,11 @@ runs:
         ADDITIONAL_PERMISSIONS: ${{ inputs.additional_permissions }}
         CLAUDE_ARGS: ${{ inputs.claude_args }}
         ALL_INPUTS: ${{ toJson(inputs) }}
-        # Event rehydration overrides (step-level env can override GITHUB_* system vars)
-        GITHUB_EVENT_NAME: ${{ inputs.event_name_override || github.event_name }}
-        GITHUB_EVENT_PATH: ${{ inputs.event_payload_path || github.event_path }}
-        GITHUB_ACTOR: ${{ inputs.actor_override || github.actor }}
+        # Event rehydration overrides (GITHUB_* system vars are read-only,
+        # so we use custom env vars that parseGitHubContext() checks)
+        EVENT_NAME_OVERRIDE: ${{ inputs.event_name_override }}
+        EVENT_PAYLOAD_PATH: ${{ inputs.event_payload_path }}
+        ACTOR_OVERRIDE: ${{ inputs.actor_override }}
 
     - name: Install Base Action Dependencies
       if: steps.prepare.outputs.contains_trigger == 'true'
@@ -342,9 +343,9 @@ runs:
         GITHUB_RUN_ID: ${{ github.run_id }}
         GITHUB_TOKEN: ${{ steps.prepare.outputs.GITHUB_TOKEN }}
         GH_TOKEN: ${{ steps.prepare.outputs.GITHUB_TOKEN }}
-        GITHUB_EVENT_NAME: ${{ inputs.event_name_override || github.event_name }}
-        GITHUB_EVENT_PATH: ${{ inputs.event_payload_path || github.event_path }}
-        GITHUB_ACTOR: ${{ inputs.actor_override || github.actor }}
+        EVENT_NAME_OVERRIDE: ${{ inputs.event_name_override }}
+        EVENT_PAYLOAD_PATH: ${{ inputs.event_payload_path }}
+        ACTOR_OVERRIDE: ${{ inputs.actor_override }}
         TRIGGER_COMMENT_ID: ${{ github.event.comment.id }}
         CLAUDE_BRANCH: ${{ steps.prepare.outputs.CLAUDE_BRANCH }}
         IS_PR: ${{ github.event.issue.pull_request != null || github.event_name == 'pull_request_target' || github.event_name == 'pull_request_review_comment' || inputs.event_name_override == 'pull_request_review_comment' }}

@@ -1,4 +1,5 @@
 import * as github from "@actions/github";
+import * as fs from "fs";
 import type {
   IssuesEvent,
   IssuesAssignedEvent,
@@ -132,15 +133,36 @@ export type GitHubContext = ParsedGitHubContext | AutomationContext;
 export function parseGitHubContext(): GitHubContext {
   const context = github.context;
 
+  // Event rehydration: GITHUB_* system env vars are read-only in GitHub Actions,
+  // so we use custom env vars to override the event context when running via
+  // workflow_run with a captured event payload.
+  const eventNameOverride = process.env.EVENT_NAME_OVERRIDE;
+  const eventPayloadPath = process.env.EVENT_PAYLOAD_PATH;
+  const actorOverride = process.env.ACTOR_OVERRIDE;
+
+  let eventName = context.eventName;
+  let payload = context.payload;
+  let actor = context.actor;
+
+  if (eventNameOverride) {
+    eventName = eventNameOverride;
+  }
+  if (eventPayloadPath && fs.existsSync(eventPayloadPath)) {
+    payload = JSON.parse(fs.readFileSync(eventPayloadPath, "utf8"));
+  }
+  if (actorOverride) {
+    actor = actorOverride;
+  }
+
   const commonFields = {
     runId: process.env.GITHUB_RUN_ID!,
-    eventAction: context.payload.action,
+    eventAction: payload.action,
     repository: {
       owner: context.repo.owner,
       repo: context.repo.repo,
       full_name: `${context.repo.owner}/${context.repo.repo}`,
     },
-    actor: context.actor,
+    actor,
     inputs: {
       prompt: process.env.PROMPT || "",
       triggerPhrase: process.env.TRIGGER_PHRASE ?? "@claude",
@@ -163,55 +185,55 @@ export function parseGitHubContext(): GitHubContext {
     },
   };
 
-  switch (context.eventName) {
+  switch (eventName) {
     case "issues": {
-      const payload = context.payload as IssuesEvent;
+      const typedPayload = payload as IssuesEvent;
       return {
         ...commonFields,
         eventName: "issues",
-        payload,
-        entityNumber: payload.issue.number,
+        payload: typedPayload,
+        entityNumber: typedPayload.issue.number,
         isPR: false,
       };
     }
     case "issue_comment": {
-      const payload = context.payload as IssueCommentEvent;
+      const typedPayload = payload as IssueCommentEvent;
       return {
         ...commonFields,
         eventName: "issue_comment",
-        payload,
-        entityNumber: payload.issue.number,
-        isPR: Boolean(payload.issue.pull_request),
+        payload: typedPayload,
+        entityNumber: typedPayload.issue.number,
+        isPR: Boolean(typedPayload.issue.pull_request),
       };
     }
     case "pull_request":
     case "pull_request_target": {
-      const payload = context.payload as PullRequestEvent;
+      const typedPayload = payload as PullRequestEvent;
       return {
         ...commonFields,
         eventName: "pull_request",
-        payload,
-        entityNumber: payload.pull_request.number,
+        payload: typedPayload,
+        entityNumber: typedPayload.pull_request.number,
         isPR: true,
       };
     }
     case "pull_request_review": {
-      const payload = context.payload as PullRequestReviewEvent;
+      const typedPayload = payload as PullRequestReviewEvent;
       return {
         ...commonFields,
         eventName: "pull_request_review",
-        payload,
-        entityNumber: payload.pull_request.number,
+        payload: typedPayload,
+        entityNumber: typedPayload.pull_request.number,
         isPR: true,
       };
     }
     case "pull_request_review_comment": {
-      const payload = context.payload as PullRequestReviewCommentEvent;
+      const typedPayload = payload as PullRequestReviewCommentEvent;
       return {
         ...commonFields,
         eventName: "pull_request_review_comment",
-        payload,
-        entityNumber: payload.pull_request.number,
+        payload: typedPayload,
+        entityNumber: typedPayload.pull_request.number,
         isPR: true,
       };
     }
@@ -219,32 +241,32 @@ export function parseGitHubContext(): GitHubContext {
       return {
         ...commonFields,
         eventName: "workflow_dispatch",
-        payload: context.payload as unknown as WorkflowDispatchEvent,
+        payload: payload as unknown as WorkflowDispatchEvent,
       };
     }
     case "repository_dispatch": {
       return {
         ...commonFields,
         eventName: "repository_dispatch",
-        payload: context.payload as unknown as RepositoryDispatchEvent,
+        payload: payload as unknown as RepositoryDispatchEvent,
       };
     }
     case "schedule": {
       return {
         ...commonFields,
         eventName: "schedule",
-        payload: context.payload as unknown as ScheduleEvent,
+        payload: payload as unknown as ScheduleEvent,
       };
     }
     case "workflow_run": {
       return {
         ...commonFields,
         eventName: "workflow_run",
-        payload: context.payload as unknown as WorkflowRunEvent,
+        payload: payload as unknown as WorkflowRunEvent,
       };
     }
     default:
-      throw new Error(`Unsupported event type: ${context.eventName}`);
+      throw new Error(`Unsupported event type: ${eventName}`);
   }
 }
 
