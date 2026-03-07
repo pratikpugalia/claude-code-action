@@ -134,6 +134,20 @@ inputs:
     required: false
     default: ""
 
+  # Event rehydration (for workflow_run two-workflow pattern)
+  event_name_override:
+    description: "Override the GitHub event name. Use when running via workflow_run to rehydrate the original event (e.g., 'pull_request_review_comment')."
+    required: false
+    default: ""
+  event_payload_path:
+    description: "Override the path to the GitHub event payload JSON file. Use when running via workflow_run to rehydrate the original event."
+    required: false
+    default: ""
+  actor_override:
+    description: "Override the GitHub actor. Use when running via workflow_run to rehydrate the original triggering user."
+    required: false
+    default: ""
+
 outputs:
   execution_file:
     description: "Path to the Claude Code execution output file"
@@ -208,6 +222,10 @@ runs:
         ADDITIONAL_PERMISSIONS: ${{ inputs.additional_permissions }}
         CLAUDE_ARGS: ${{ inputs.claude_args }}
         ALL_INPUTS: ${{ toJson(inputs) }}
+        # Event rehydration overrides (step-level env can override GITHUB_* system vars)
+        GITHUB_EVENT_NAME: ${{ inputs.event_name_override || github.event_name }}
+        GITHUB_EVENT_PATH: ${{ inputs.event_payload_path || github.event_path }}
+        GITHUB_ACTOR: ${{ inputs.actor_override || github.actor }}
 
     - name: Install Base Action Dependencies
       if: steps.prepare.outputs.contains_trigger == 'true'
@@ -324,14 +342,16 @@ runs:
         GITHUB_RUN_ID: ${{ github.run_id }}
         GITHUB_TOKEN: ${{ steps.prepare.outputs.GITHUB_TOKEN }}
         GH_TOKEN: ${{ steps.prepare.outputs.GITHUB_TOKEN }}
-        GITHUB_EVENT_NAME: ${{ env.GITHUB_EVENT_NAME || github.event_name }}
+        GITHUB_EVENT_NAME: ${{ inputs.event_name_override || github.event_name }}
+        GITHUB_EVENT_PATH: ${{ inputs.event_payload_path || github.event_path }}
+        GITHUB_ACTOR: ${{ inputs.actor_override || github.actor }}
         TRIGGER_COMMENT_ID: ${{ github.event.comment.id }}
         CLAUDE_BRANCH: ${{ steps.prepare.outputs.CLAUDE_BRANCH }}
-        IS_PR: ${{ github.event.issue.pull_request != null || github.event_name == 'pull_request_target' || github.event_name == 'pull_request_review_comment' }}
+        IS_PR: ${{ github.event.issue.pull_request != null || github.event_name == 'pull_request_target' || github.event_name == 'pull_request_review_comment' || inputs.event_name_override == 'pull_request_review_comment' }}
         BASE_BRANCH: ${{ steps.prepare.outputs.BASE_BRANCH }}
         CLAUDE_SUCCESS: ${{ steps.claude-code.outputs.conclusion == 'success' }}
         OUTPUT_FILE: ${{ steps.claude-code.outputs.execution_file || '' }}
-        TRIGGER_USERNAME: ${{ github.event.comment.user.login || github.event.issue.user.login || github.event.pull_request.user.login || github.event.sender.login || github.triggering_actor || github.actor || '' }}
+        TRIGGER_USERNAME: ${{ github.event.comment.user.login || github.event.issue.user.login || github.event.pull_request.user.login || github.event.sender.login || github.triggering_actor || inputs.actor_override || github.actor || '' }}
         PREPARE_SUCCESS: ${{ steps.prepare.outcome == 'success' }}
         PREPARE_ERROR: ${{ steps.prepare.outputs.prepare_error || '' }}
         USE_STICKY_COMMENT: ${{ inputs.use_sticky_comment }}
