@@ -46,6 +46,7 @@ export const tagMode: Mode = {
       commentId: data?.commentId,
       baseBranch: data?.baseBranch,
       claudeBranch: data?.claudeBranch,
+      isGhstack: data?.isGhstack,
     };
   },
 
@@ -137,6 +138,7 @@ export const tagMode: Mode = {
       commentId,
       baseBranch: branchInfo.baseBranch,
       claudeBranch: branchInfo.claudeBranch,
+      isGhstack: branchInfo.isGhstack,
     });
 
     await createPrompt(tagMode, modeContext, githubData, context);

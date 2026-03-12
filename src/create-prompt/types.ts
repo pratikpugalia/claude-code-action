@@ -17,6 +17,7 @@ type PullRequestReviewCommentEvent = {
   commentBody: string;
   claudeBranch?: string;
   baseBranch?: string;
+  isGhstack?: boolean;
 };
 
 type PullRequestReviewEvent = {
@@ -26,6 +27,7 @@ type PullRequestReviewEvent = {
   commentBody?: string; // May be absent for approvals without comments
   claudeBranch?: string;
   baseBranch?: string;
+  isGhstack?: boolean;
 };
 
 type IssueCommentEvent = {
@@ -47,6 +49,7 @@ type PullRequestCommentEvent = {
   commentBody: string;
   claudeBranch?: string;
   baseBranch?: string;
+  isGhstack?: boolean;
 };
 
 type IssueOpenedEvent = {
@@ -84,6 +87,7 @@ type PullRequestBaseEvent = {
   prNumber: string;
   claudeBranch?: string;
   baseBranch?: string;
+  isGhstack?: boolean;
 };
 
 type PullRequestEvent = PullRequestBaseEvent & {

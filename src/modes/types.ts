@@ -11,12 +11,14 @@ export type ModeContext = {
   commentId?: number;
   baseBranch?: string;
   claudeBranch?: string;
+  isGhstack?: boolean;
 };
 
 export type ModeData = {
   commentId?: number;
   baseBranch?: string;
   claudeBranch?: string;
+  isGhstack?: boolean;
 };
 
 /**
@@ -95,6 +97,7 @@ export type ModeResult = {
     baseBranch: string;
     claudeBranch?: string;
     currentBranch: string;
+    isGhstack?: boolean;
   };
   mcpConfig: string;
 };

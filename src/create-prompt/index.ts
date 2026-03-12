@@ -114,6 +114,7 @@ export function prepareContext(
   claudeCommentId: string,
   baseBranch?: string,
   claudeBranch?: string,
+  isGhstack?: boolean,
 ): PreparedContext {
   const repository = context.repository.full_name;
   const eventName = context.eventName;
@@ -186,6 +187,7 @@ export function prepareContext(
         commentBody,
         ...(claudeBranch && { claudeBranch }),
         ...(baseBranch && { baseBranch }),
+        ...(isGhstack && { isGhstack }),
       };
       break;
 
@@ -203,6 +205,7 @@ export function prepareContext(
         commentBody,
         ...(claudeBranch && { claudeBranch }),
         ...(baseBranch && { baseBranch }),
+        ...(isGhstack && { isGhstack }),
       };
       break;
 
@@ -228,6 +231,7 @@ export function prepareContext(
           commentBody,
           ...(claudeBranch && { claudeBranch }),
           ...(baseBranch && { baseBranch }),
+          ...(isGhstack && { isGhstack }),
         };
         break;
       } else if (!claudeBranch) {
@@ -324,6 +328,7 @@ export function prepareContext(
         prNumber,
         ...(claudeBranch && { claudeBranch }),
         ...(baseBranch && { baseBranch }),
+        ...(isGhstack && { isGhstack }),
       };
       break;
 
@@ -406,6 +411,22 @@ function getCommitInstructions(
     (githubData.triggerDisplayName ?? context.triggerUsername !== "Unknown")
       ? `Co-authored-by: ${githubData.triggerDisplayName ?? context.triggerUsername} <${context.triggerUsername}@users.noreply.github.com>`
       : "";
+
+  // Check if this is a ghstack-managed PR
+  const isGhstack = eventData.isPR && "isGhstack" in eventData && eventData.isGhstack;
+
+  // ghstack PRs require amending the existing commit instead of creating new ones
+  if (isGhstack) {
+    return `
+      **IMPORTANT: This is a ghstack-managed PR.** ghstack requires exactly one commit on the head branch.
+      You MUST amend the existing commit instead of creating a new one. Do NOT create additional commits.
+      - Use git commands via the Bash tool to amend and force-push your changes:
+        - Stage files: Bash(git add <files>)
+        - Amend the existing commit (preserving its message): Bash(git commit --amend --no-edit)
+        - Force push with lease: Bash(git push --force-with-lease origin HEAD)
+      - IMPORTANT: Do NOT modify the commit message — it contains metadata required by ghstack.
+      - Do NOT add any Co-Authored-By trailers to the commit message.`;
+  }
 
   if (useCommitSigning) {
     if (eventData.isPR && !eventData.claudeBranch) {
@@ -923,6 +944,7 @@ export async function createPrompt(
       claudeCommentId,
       modeContext.baseBranch,
       modeContext.claudeBranch,
+      modeContext.isGhstack,
     );
 
     await mkdir(`${process.env.RUNNER_TEMP || "/tmp"}/claude-prompts`, {

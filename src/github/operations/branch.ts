@@ -136,7 +136,17 @@ export type BranchInfo = {
   baseBranch: string;
   claudeBranch?: string;
   currentBranch: string;
+  isGhstack?: boolean;
 };
+
+/**
+ * Detects whether a PR uses ghstack-managed branches.
+ * ghstack creates branches with the pattern gh/<user>/<N>/head and gh/<user>/<N>/base.
+ */
+export function isGhstackBranch(headRef: string, baseRef: string): boolean {
+  const pattern = /^gh\/[^/]+\/\d+\/(head|base)$/;
+  return pattern.test(headRef) && pattern.test(baseRef);
+}
 
 export async function setupBranch(
   octokits: Octokits,
@@ -163,14 +173,24 @@ export async function setupBranch(
       console.log("This is an open PR, checking out PR branch...");
 
       const branchName = prData.headRefName;
+      const baseRefName = prData.baseRefName;
       const isForkPR = prData.isCrossRepository;
 
+      // Detect ghstack-managed PRs
+      const ghstack = isGhstackBranch(branchName, baseRefName);
+      if (ghstack) {
+        console.log(
+          `Detected ghstack-managed PR (head: ${branchName}, base: ${baseRefName})`,
+        );
+      }
+
       // Determine optimal fetch depth based on PR commit count, with a minimum of 20
+      // For ghstack PRs, we need full history so amend works correctly
       const commitCount = prData.commits.totalCount;
-      const fetchDepth = Math.max(commitCount, 20);
+      const fetchDepth = ghstack ? 0 : Math.max(commitCount, 20);
 
       console.log(
-        `PR #${entityNumber}: ${commitCount} commits, using fetch depth ${fetchDepth}${isForkPR ? " (fork PR)" : ""}`,
+        `PR #${entityNumber}: ${commitCount} commits, using fetch depth ${fetchDepth === 0 ? "full" : fetchDepth}${isForkPR ? " (fork PR)" : ""}${ghstack ? " (ghstack)" : ""}`,
       );
 
       // Validate branch names before use to prevent command injection
@@ -210,7 +230,11 @@ export async function setupBranch(
         };
       } else {
         // For same-repo PRs, fetch the branch directly by name
-        execGit(["fetch", "origin", `--depth=${fetchDepth}`, branchName]);
+        // For ghstack, fetch without depth limit so git amend works
+        const fetchArgs = ghstack
+          ? ["fetch", "origin", branchName]
+          : ["fetch", "origin", `--depth=${fetchDepth}`, branchName];
+        execGit(fetchArgs);
         execGit(["checkout", branchName, "--"]);
 
         console.log(`Successfully checked out PR branch for PR #${entityNumber}`);
@@ -223,6 +247,7 @@ export async function setupBranch(
       return {
         baseBranch,
         currentBranch: branchName,
+        isGhstack: ghstack || undefined,
       };
     }
   }
