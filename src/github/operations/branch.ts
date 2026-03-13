@@ -132,6 +132,30 @@ function execGit(args: string[]): void {
   execFileSync("git", args, { stdio: "inherit" });
 }
 
+/**
+ * Overlay .claude/ directory from the base branch onto the current working tree.
+ *
+ * Security: Skills, CLAUDE.md, and settings must always come from the base
+ * branch (e.g. main), never from the PR branch. A malicious PR could tamper
+ * with skill files to inject prompts that exfiltrate secrets or bypass review
+ * guidelines. This also ensures skills are available even when the PR branch
+ * was created before they were added to the base branch.
+ */
+function overlayClaudeConfigFromBase(baseBranch: string): void {
+  try {
+    execGit(["fetch", "origin", "--depth=1", baseBranch]);
+    execGit(["checkout", `origin/${baseBranch}`, "--", ".claude/"]);
+    console.log(
+      `Overlaid .claude/ from base branch (${baseBranch}) for security`,
+    );
+  } catch {
+    // .claude/ may not exist on the base branch — that's fine
+    console.log(
+      `No .claude/ directory found on base branch (${baseBranch}), skipping overlay`,
+    );
+  }
+}
+
 export type BranchInfo = {
   baseBranch: string;
   claudeBranch?: string;
@@ -204,6 +228,8 @@ export async function setupBranch(
         const baseBranch = prData.baseRefName;
         validateBranchName(baseBranch);
 
+        overlayClaudeConfigFromBase(baseBranch);
+
         return {
           baseBranch,
           currentBranch: localBranchName,
@@ -219,6 +245,8 @@ export async function setupBranch(
       // For open PRs, we need to get the base branch of the PR
       const baseBranch = prData.baseRefName;
       validateBranchName(baseBranch);
+
+      overlayClaudeConfigFromBase(baseBranch);
 
       return {
         baseBranch,
