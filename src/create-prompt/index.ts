@@ -415,17 +415,48 @@ function getCommitInstructions(
   // Check if this is a ghstack-managed PR
   const isGhstack = eventData.isPR && "isGhstack" in eventData && eventData.isGhstack;
 
-  // ghstack PRs require amending the existing commit instead of creating new ones
+  // ghstack PRs require amending the existing commit instead of creating new ones,
+  // and also updating the orig branch to keep ghstack metadata consistent.
   if (isGhstack) {
     return `
       **IMPORTANT: This is a ghstack-managed PR.** ghstack requires exactly one commit on the head branch.
       You MUST amend the existing commit instead of creating a new one. Do NOT create additional commits.
-      - Use git commands via the Bash tool to amend and force-push your changes:
-        - Stage files: Bash(git add <files>)
-        - Amend the existing commit (preserving its message): Bash(git commit --amend --no-edit)
-        - Force push with lease: Bash(git push --force-with-lease origin HEAD)
-      - IMPORTANT: Do NOT modify the commit message — it contains metadata required by ghstack.
-      - Do NOT add any Co-Authored-By trailers to the commit message.`;
+
+      **Step 1: Make your changes and amend the head commit**
+      - Stage files: Bash(git add <files>)
+      - Amend the existing commit (preserving its message): Bash(git commit --amend --no-edit)
+      - Force push with lease: Bash(git push --force-with-lease origin HEAD)
+
+      **Step 2: Update the ghstack orig branch** (required to keep ghstack metadata consistent)
+      ghstack maintains an "orig" branch (the current branch name with '/head' replaced by '/orig') that stores the source-of-truth commit
+      with the real commit message and a ghstack-source-id trailer. After amending head, you MUST
+      update orig so the next \`ghstack push\` by the author doesn't silently overwrite your changes.
+
+      Run these commands in a single bash block:
+      \`\`\`bash
+      # Get the current branch name and derive the orig branch
+      HEAD_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      ORIG_BRANCH=$(echo "$HEAD_BRANCH" | sed 's|/head$|/orig|')
+
+      # Fetch the current orig branch
+      git fetch origin "$ORIG_BRANCH"
+
+      # Get the new tree hash (from our amended head commit)
+      NEW_TREE=$(git rev-parse HEAD^{tree})
+
+      # Get the orig commit's parent and message, then update the ghstack-source-id trailer
+      ORIG_PARENT=$(git rev-parse "origin/$ORIG_BRANCH^")
+      ORIG_MSG=$(git cat-file commit "origin/$ORIG_BRANCH" | sed '1,/^$/d' | sed "s/^ghstack-source-id: .*/ghstack-source-id: $NEW_TREE/")
+
+      # Create a new orig commit with the updated tree and metadata
+      NEW_ORIG=$(echo "$ORIG_MSG" | git commit-tree "$NEW_TREE" -p "$ORIG_PARENT")
+
+      # Force push the updated orig branch
+      git push --force-with-lease origin "$NEW_ORIG:refs/heads/$ORIG_BRANCH"
+      \`\`\`
+
+      - IMPORTANT: Do NOT modify the head commit message — it contains [ghstack-poisoned] metadata.
+      - Do NOT add any Co-Authored-By trailers to any commit message.`;
   }
 
   if (useCommitSigning) {

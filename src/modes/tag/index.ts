@@ -177,6 +177,17 @@ export const tagMode: Mode = {
         "Bash(git log:*)",
         "Bash(git rm:*)",
       );
+
+      // ghstack PRs need git plumbing commands to update the orig branch
+      if (branchInfo.isGhstack) {
+        tagModeTools.push(
+          "Bash(git rev-parse:*)",
+          "Bash(git cat-file:*)",
+          "Bash(git commit-tree:*)",
+          "Bash(git fetch:*)",
+          "Bash(git update-ref:*)",
+        );
+      }
     } else {
       // When using API commit signing, use MCP file ops tools
       tagModeTools.push(
